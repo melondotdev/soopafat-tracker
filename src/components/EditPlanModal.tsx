@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Plus, X, Trash2 } from 'lucide-react';
 import type { WorkoutPlan, WorkoutSession, Exercise } from '../types';
 
-interface CreatePlanModalProps {
+interface EditPlanModalProps {
+  plan: WorkoutPlan;
   onSave: (plan: WorkoutPlan) => void;
   onClose: () => void;
 }
@@ -17,26 +18,16 @@ const DEFAULT_EXERCISE: Exercise = {
   notes: ''
 };
 
-const DEFAULT_SESSION: WorkoutSession = {
-  id: '',
-  name: '',
-  exercises: [{ ...DEFAULT_EXERCISE }],
-  assignedDays: []
-};
-
-export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
-  const [name, setName] = useState('');
-  const [sessions, setSessions] = useState<WorkoutSession[]>([{
-    ...DEFAULT_SESSION,
-    id: `session-${Date.now()}`,
-    name: 'Session 1'
-  }]);
+export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
+  const [name, setName] = useState(plan.name);
+  const [sessions, setSessions] = useState<WorkoutSession[]>(plan.sessions);
 
   const addSession = () => {
     setSessions([...sessions, {
-      ...DEFAULT_SESSION,
       id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `Session ${sessions.length + 1}`
+      name: `Session ${sessions.length + 1}`,
+      exercises: [{ ...DEFAULT_EXERCISE }],
+      assignedDays: []
     }]);
   };
 
@@ -100,13 +91,13 @@ export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
       return;
     }
 
-    const plan: Omit<WorkoutPlan, 'id'> = {
+    const updatedPlan: WorkoutPlan = {
+      ...plan,
       name: name.trim() || 'Custom Plan',
-      sessions: validSessions,
-      isDefault: false
+      sessions: validSessions
     };
 
-    onSave(plan);
+    onSave(updatedPlan);
   };
 
   return (
@@ -114,7 +105,7 @@ export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
       <div className="relative bg-white rounded-lg p-6 w-full max-w-4xl m-4 my-8">
         <div className="sticky top-0 bg-white pb-4 border-b mb-6 z-10">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Create Workout Plan</h2>
+            <h2 className="text-2xl font-bold">Edit Workout Plan</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
               <X className="w-6 h-6" />
             </button>
@@ -130,7 +121,6 @@ export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Workout Plan"
               className="w-full p-2 border rounded-lg"
             />
           </div>
@@ -142,7 +132,6 @@ export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
                   type="text"
                   value={session.name}
                   onChange={(e) => updateSessionName(sessionIndex, e.target.value)}
-                  placeholder="Session Name"
                   className="text-lg font-semibold bg-transparent border-b border-transparent focus:border-gray-300 focus:outline-none"
                 />
                 {sessions.length > 1 && (
@@ -256,7 +245,7 @@ export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
                 onClick={handleSubmit}
                 className="flex-1 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
               >
-                Create Plan
+                Save Changes
               </button>
               <button
                 onClick={onClose}
