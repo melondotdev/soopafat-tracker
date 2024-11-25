@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Plus, X, Trash2 } from 'lucide-react';
 import type { WorkoutPlan, WorkoutSession, Exercise } from '../types';
 
-interface EditPlanModalProps {
-  plan: WorkoutPlan;
+interface CreatePlanModalProps {
   onSave: (plan: WorkoutPlan) => void;
   onClose: () => void;
 }
@@ -18,16 +17,26 @@ const DEFAULT_EXERCISE: Exercise = {
   notes: ''
 };
 
-export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
-  const [name, setName] = useState(plan.name);
-  const [sessions, setSessions] = useState<WorkoutSession[]>(plan.sessions);
+const DEFAULT_SESSION: WorkoutSession = {
+  id: '',
+  name: '',
+  exercises: [{ ...DEFAULT_EXERCISE }],
+  assignedDays: []
+};
+
+export function CreatePlanModal({ onSave, onClose }: CreatePlanModalProps) {
+  const [name, setName] = useState('');
+  const [sessions, setSessions] = useState<WorkoutSession[]>([{
+    ...DEFAULT_SESSION,
+    id: `session-${Date.now()}`,
+    name: 'Session 1'
+  }]);
 
   const addSession = () => {
     setSessions([...sessions, {
+      ...DEFAULT_SESSION,
       id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: `Session ${sessions.length + 1}`,
-      exercises: [{ ...DEFAULT_EXERCISE }],
-      assignedDays: []
+      name: `Session ${sessions.length + 1}`
     }]);
   };
 
@@ -91,23 +100,25 @@ export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
       return;
     }
 
-    const updatedPlan: WorkoutPlan = {
-      ...plan,
+    const plan: Omit<WorkoutPlan, 'id'> = {
       name: name.trim() || 'Custom Plan',
-      sessions: validSessions
+      sessions: validSessions,
+      isDefault: false
     };
 
-    onSave(updatedPlan);
+    onSave(plan);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-8">
-      <div className="bg-white rounded-lg p-6 w-full max-w-4xl m-4">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">Edit Workout Plan</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
-            <X className="w-6 h-6" />
-          </button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto">
+      <div className="relative bg-white rounded-lg p-6 w-full max-w-4xl m-4 my-8">
+        <div className="sticky top-0 bg-white pb-4 border-b mb-6 z-10">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold">Create Workout Plan</h2>
+            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -119,6 +130,7 @@ export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="My Workout Plan"
               className="w-full p-2 border rounded-lg"
             />
           </div>
@@ -130,6 +142,7 @@ export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
                   type="text"
                   value={session.name}
                   onChange={(e) => updateSessionName(sessionIndex, e.target.value)}
+                  placeholder="Session Name"
                   className="text-lg font-semibold bg-transparent border-b border-transparent focus:border-gray-300 focus:outline-none"
                 />
                 {sessions.length > 1 && (
@@ -237,19 +250,21 @@ export function EditPlanModal({ plan, onSave, onClose }: EditPlanModalProps) {
             Add Session
           </button>
 
-          <div className="flex gap-4">
-            <button
-              onClick={handleSubmit}
-              className="flex-1 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
-            >
-              Save Changes
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-            >
-              Cancel
-            </button>
+          <div className="sticky bottom-0 bg-white pt-4 border-t mt-6">
+            <div className="flex gap-4">
+              <button
+                onClick={handleSubmit}
+                className="flex-1 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
+              >
+                Create Plan
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       </div>
