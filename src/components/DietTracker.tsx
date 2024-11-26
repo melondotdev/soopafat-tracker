@@ -1,121 +1,277 @@
-import React, { useState, useCallback } from 'react';
-import { Plus, Search, Star, Trash2, X } from 'lucide-react';
-import type { FoodEntry } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Activity, Utensils, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { DateNavigator } from '../components/DateNavigator';
+import { ProgressBar } from '../components/ProgressBar';
+import { DietTracker } from '../components/DietTracker';
+import { ExerciseTracker } from '../components/ExerciseTracker';
+import { SettingsModal } from '../components/SettingsModal';
+import { FoodSearch } from '../components/FoodSearch';
+import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../hooks/useSettings';
+import { useNavigate } from 'react-router-dom';
+import { 
+  getFoodEntries, 
+  saveFoodEntry, 
+  deleteFoodEntry,
+  saveDailyProgress,
+  getDailyProgress
+} from '../lib/db';
+import type { DailyProgress, FoodEntry } from '../types';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
-interface DietTrackerProps {
-  entries: FoodEntry[];
-  onAddEntry: (entry: FoodEntry) => void;
-  onRemoveEntry: (id: string) => void;
-}
-
-export function DietTracker({ entries, onAddEntry, onRemoveEntry }: DietTrackerProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [quickAddMode, setQuickAddMode] = useState(false);
-  const [quickAddForm, setQuickAddForm] = useState({
-    calories: '',
-    protein: ''
+export function Dashboard() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [activeTab, setActiveTab] = useState<'diet' | 'exercise'>('diet');
+  const [foodEntries, setFoodEntries] = useState<FoodEntry[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFoodSearch, setShowFoodSearch] = useState(false);
+  const { settings, loading: settingsLoading } = useSettings();
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress>({
+    date: currentDate.toISOString().split('T')[0],
+    calories: 0,
+    protein: 0,
+    steps: 0,
+    completedSessions: 0
   });
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const handleQuickAdd = useCallback(() => {
+  useEffect(() => {
+    if (currentUser) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      loadDailyData(dateStr);
+    }
+  }, [currentDate, currentUser]);
+
+  const loadDailyData = async (dateStr: string) => {
+    if (!currentUser) return;
+    try {
+      const [progress, entries] = await Promise.all([
+        getDailyProgress(currentUser.uid, dateStr),
+        getFoodEntries(currentUser.uid, dateStr)
+      ]);
+      
+      if (progress) {
+        setDailyProgress(progress);
+      } else {
+        setDailyProgress({
+          date: dateStr,
+          calories: 0,
+          protein: 0,
+          steps: 0,
+          completedSessions: 0
+        });
+      }
+      
+      setFoodEntries(entries);
+      updateProgressFromEntries(entries);
+    } catch (error) {
+      console.error('Error loading daily data:', error);
+    }
+  };
+
+  const updateProgressFromEntries = (entries: FoodEntry[]) => {
+    const totalCalories = entries.reduce((sum, entry) => sum + entry.calories, 0);
+    const totalProtein = entries.reduce((sum, entry) => sum + entry.protein, 0);
+    
+    setDailyProgress(prev => ({
+      ...prev,
+      calories: totalCalories,
+      protein: totalProtein
+    }));
+  };
+
+  const handleStepsUpdate = async (steps: number) => {
+    if (!currentUser) return;
+    const dateStr = currentDate.toISOString().split('T')[0];
+    const updatedProgress = { ...dailyProgress, steps };
+    setDailyProgress(updatedProgress);
+    await saveDailyProgress(currentUser.uid, dateStr, updatedProgress);
+  };
+
+  const addFoodEntry = async (entry: FoodEntry) => {
+    if (!currentUser) return;
+    const dateStr = currentDate.toISOString().split('T')[0];
+    try {
+      await saveFoodEntry(currentUser.uid, dateStr, entry);
+      setFoodEntries(prev => [...prev, entry]);
+      updateProgressFromEntries([...foodEntries, entry]);
+    } catch (error) {
+      console.error('Error saving food entry:', error);
+    }
+  };
+
+  const removeFoodEntry = async (id: string) => {
+    if (!currentUser) return;
+    const dateStr = currentDate.toISOString().split('T')[0];
+    try {
+      await deleteFoodEntry(currentUser.uid, dateStr, id);
+      const updatedEntries = foodEntries.filter(entry => entry.id !== id);
+      setFoodEntries(updatedEntries);
+      updateProgressFromEntries(updatedEntries);
+    } catch (error) {
+      console.error('Error deleting food entry:', error);
+    }
+  };
+
+  const handleFoodSelect = (food: any, quantity: number) => {
     const newEntry: FoodEntry = {
       id: Date.now().toString(),
-      name: 'Quick Add',
-      calories: Number(quickAddForm.calories) || 0,
-      protein: Number(quickAddForm.protein) || 0,
-      timestamp: new Date().toISOString(),
+      name: food.name,
+      calories: Math.round(food.calories * (quantity / food.servingSize)),
+      protein: Math.round(food.protein * (quantity / food.servingSize) * 10) / 10,
+      timestamp: currentDate.toISOString(),
       isFavorite: false
     };
-    
-    onAddEntry(newEntry);
-    setQuickAddMode(false);
-    setQuickAddForm({ calories: '', protein: '' });
-  }, [quickAddForm, onAddEntry]);
+    addFoodEntry(newEntry);
+    setShowFoodSearch(false);
+  };
 
-  const filteredEntries = entries.filter(entry =>
-    entry.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const updateWorkoutProgress = async (completedSessions: number) => {
+    if (!currentUser) return;
+    const dateStr = currentDate.toISOString().split('T')[0];
+    const updatedProgress = { ...dailyProgress, completedSessions };
+    setDailyProgress(updatedProgress);
+    await saveDailyProgress(currentUser.uid, dateStr, updatedProgress);
+  };
+
+  async function handleLogout() {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Failed to log out', error);
+    }
+  }
+
+  if (settingsLoading) {
+    return <LoadingSpinner />;
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search foods..."
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <button
-          onClick={() => setQuickAddMode(true)}
-          className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center gap-2"
-        >
-          <Plus className="w-5 h-5" />
-          Quick Add
-        </button>
-      </div>
-
-      {quickAddMode && (
-        <div className="bg-white p-4 rounded-lg shadow-sm space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold">Quick Add</h3>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-900">SOOPAFAT</h1>
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => setQuickAddMode(false)}
-              className="p-1 hover:bg-gray-100 rounded-full"
+              onClick={() => setShowSettings(true)}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
             >
-              <X className="w-5 h-5" />
+              <SettingsIcon className="w-5 h-5" />
+            </button>
+            <span className="text-sm text-gray-600">{currentUser?.email}</span>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <input
-              type="number"
-              placeholder="Calories"
-              value={quickAddForm.calories}
-              onChange={(e) => setQuickAddForm(prev => ({ ...prev, calories: e.target.value }))}
-              className="p-2 border rounded-lg"
-            />
-            <input
-              type="number"
-              placeholder="Protein (g)"
-              value={quickAddForm.protein}
-              onChange={(e) => setQuickAddForm(prev => ({ ...prev, protein: e.target.value }))}
-              className="p-2 border rounded-lg"
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+        <DateNavigator date={currentDate} onDateChange={setCurrentDate} />
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <ProgressBar
+              current={dailyProgress.calories}
+              target={settings.caloriesTarget}
+              label="Calories"
+              color="blue"
             />
           </div>
-          <button 
-            onClick={handleQuickAdd}
-            className="w-full py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600"
-          >
-            Add Entry
-          </button>
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <ProgressBar
+              current={dailyProgress.protein}
+              target={settings.proteinTarget}
+              label="Protein (g)"
+              color="magenta"
+            />
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-sm col-span-2 sm:col-span-1">
+            <ProgressBar
+              current={dailyProgress.steps}
+              target={settings.stepsTarget}
+              label="Steps"
+              color="yellow"
+              editable
+              onUpdate={handleStepsUpdate}
+            />
+          </div>
         </div>
-      )}
 
-      <div className="space-y-2">
-        {filteredEntries.map((entry) => (
-          <div
-            key={entry.id}
-            className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between"
-          >
-            <div>
-              <h4 className="font-medium">{entry.name}</h4>
-              <p className="text-sm text-gray-500">
-                {entry.calories} cal • {entry.protein}g protein
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="border-b">
+            <div className="flex">
               <button
-                onClick={() => onRemoveEntry(entry.id)}
-                className="p-1 text-red-500 rounded-full hover:bg-red-50"
+                className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 border-b-2 transition-colors ${
+                  activeTab === 'diet'
+                    ? 'border-emerald-500 text-emerald-500'
+                    : 'border-transparent hover:bg-gray-50'
+                }`}
+                onClick={() => setActiveTab('diet')}
               >
-                <Trash2 className="w-5 h-5" />
+                <Utensils className="w-5 h-5" />
+                Diet
+              </button>
+              <button
+                className={`flex-1 px-4 py-3 flex items-center justify-center gap-2 border-b-2 transition-colors ${
+                  activeTab === 'exercise'
+                    ? 'border-emerald-500 text-emerald-500'
+                    : 'border-transparent hover:bg-gray-50'
+                }`}
+                onClick={() => setActiveTab('exercise')}
+              >
+                <Activity className="w-5 h-5" />
+                Exercise
               </button>
             </div>
           </div>
-        ))}
-      </div>
+          
+          <div className="p-4">
+            {activeTab === 'diet' ? (
+              <>
+                <button
+                  onClick={() => setShowFoodSearch(true)}
+                  className="mb-4 w-full px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                >
+                  Search Foods
+                </button>
+                <DietTracker 
+                  entries={foodEntries}
+                  onAddEntry={addFoodEntry}
+                  onRemoveEntry={removeFoodEntry}
+                  selectedDate={currentDate}
+                />
+              </>
+            ) : (
+              <ExerciseTracker 
+                onSessionComplete={updateWorkoutProgress}
+                selectedDate={currentDate}
+              />
+            )}
+          </div>
+        </div>
+      </main>
+
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {showFoodSearch && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <FoodSearch onFoodSelect={handleFoodSelect} />
+            <button
+              onClick={() => setShowFoodSearch(false)}
+              className="mt-4 w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

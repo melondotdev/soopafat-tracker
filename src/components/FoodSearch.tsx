@@ -8,6 +8,7 @@ import type { ProcessedFood } from '../data/cnfDatabase';
 
 interface FoodSearchProps {
   onFoodSelect: (food: any, quantity: number) => void;
+  selectedDate?: Date;
 }
 
 // Normalize search text for consistent matching
@@ -18,7 +19,7 @@ function normalizeText(text: string): string {
     .replace(/[^a-z0-9\s]/g, '');
 }
 
-export function FoodSearch({ onFoodSelect }: FoodSearchProps) {
+export function FoodSearch({ onFoodSelect, selectedDate = new Date() }: FoodSearchProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFood, setSelectedFood] = useState<(CustomFood | ProcessedFood) | null>(null);
   const [quantity, setQuantity] = useState(100);
@@ -80,15 +81,7 @@ export function FoodSearch({ onFoodSelect }: FoodSearchProps) {
 
   const handleAdd = () => {
     if (selectedFood) {
-      const multiplier = quantity / selectedFood.servingSize;
-      const adjustedFood = {
-        ...selectedFood,
-        calories: Math.round(selectedFood.calories * multiplier),
-        protein: Math.round(selectedFood.protein * multiplier * 10) / 10,
-        carbs: Math.round((selectedFood.carbs || 0) * multiplier * 10) / 10,
-        fat: Math.round((selectedFood.fat || 0) * multiplier * 10) / 10
-      };
-      onFoodSelect(adjustedFood, quantity);
+      onFoodSelect(selectedFood, quantity);
       setSelectedFood(null);
       setQuantity(100);
       setSearchTerm('');
